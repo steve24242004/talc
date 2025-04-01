@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 
 export default function HomeScreen({ navigation }) {
   useEffect(() => {
@@ -14,7 +13,6 @@ export default function HomeScreen({ navigation }) {
   return (
     <View style={styles.container}>
       {/* App Logo */}
-      <StatusBar style="auto" />
       <Image source={require('../../assets/images/Logo.png')} style={styles.logo} />
       
       <Text style={styles.text}>Welcome to TALC!</Text>

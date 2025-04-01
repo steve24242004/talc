@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { auth, db } from '../firebaseConfig'; // Import Firebase config
+
+
+
+
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 
 export default function RegisterScreen({ navigation }) {
   const [firstName, setFirstName] = useState('');
@@ -8,32 +15,55 @@ export default function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [mobile, setMobile] = useState('');
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!firstName || !lastName || !email || !password || !mobile) {
       Alert.alert('Error', 'All fields are required');
       return;
     }
-    console.log('Registering:', { firstName, lastName, email, password, mobile });
-    // TODO: Implement backend API call for registration
-    Alert.alert('Success', 'Account created successfully!');
-    navigation.navigate('Login'); // Navigate to Login after successful registration
+
+    try {
+      // Create user in Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Save additional user details in Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        firstName,
+        lastName,
+        email,
+        mobile,
+        createdAt: new Date()
+      });
+
+      Alert.alert('Success', 'Account created successfully!');
+      setFirstName('');
+      setLastName('');
+      setEmail('');
+      setPassword('');
+      setMobile('');
+
+      navigation.navigate('LoginScreen');
+    } catch (error) {
+      Alert.alert('Error', error.message);
+      console.error("Registration error:", error.message);
+
+    }
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Register</Text>
-
       <TextInput style={styles.input} placeholder="First Name" value={firstName} onChangeText={setFirstName} />
       <TextInput style={styles.input} placeholder="Last Name" value={lastName} onChangeText={setLastName} />
-      <TextInput style={styles.input} placeholder="Email ID" value={email} onChangeText={setEmail} keyboardType="email-address" />
+      <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
       <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
-      <TextInput style={styles.input} placeholder="Mobile Number" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
+      <TextInput style={styles.input} placeholder="Mobile" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
 
       <TouchableOpacity style={styles.button} onPress={handleRegister}>
         <Text style={styles.buttonText}>Register</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.link} onPress={() => navigation.navigate('Login')}>
+      <TouchableOpacity style={styles.link} onPress={() => navigation.navigate('LoginScreen')}>
         <Text style={styles.linkText}>Already have an account? Login</Text>
       </TouchableOpacity>
     </View>

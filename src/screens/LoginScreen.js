@@ -1,34 +1,84 @@
 import React, { useState } from 'react';
-import auth from '@react-native-firebase/auth';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "../firebaseConfig"; // Ensure Firestore is imported if needed
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 export default function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState('');
+  const [emailOrUsername, setEmailOrUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const getEmailFromUsername = async (username) => {
+    try {
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("username", "==", username));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        return querySnapshot.docs[0].data().email;
+      } else {
+        throw new Error("Username not found");
+      }
+    } catch (error) {
+      console.error("Error fetching email:", error);
+      throw error;
+    }
+  };
 
   const handleLogin = async () => {
+    setLoading(true);
+    
+    let email = emailOrUsername;
+
+    if (!email.includes("@")) {
+      try {
+        email = await getEmailFromUsername(emailOrUsername);
+      } catch (error) {
+        setLoading(false);
+        return Alert.alert("Login Failed", "Invalid username or email.");
+      }
+    }
+
     try {
-      await auth().signInWithEmailAndPassword(email, password);
-      navigation.replace('Home'); // Navigate to Home after successful login
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log("User logged in:", userCredential.user);
+      navigation.replace("Home");
     } catch (error) {
-      console.error(error);
-      alert('Login failed. Please check your credentials.');
+      console.error("Login error:", error.message);
+      Alert.alert("Login Failed", mapFirebaseError(error.code));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const mapFirebaseError = (code) => {
+    switch (code) {
+      case "auth/invalid-email":
+        return "Invalid email format.";
+      case "auth/user-not-found":
+        return "User does not exist.";
+      case "auth/wrong-password":
+        return "Incorrect password.";
+      default:
+        return "Login failed. Please try again.";
     }
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === "ios" ? "padding" : "height"} 
+      style={styles.container}
+    >
       <Image source={require('../../assets/images/Logo.png')} style={styles.logo} />
-
       <Text style={styles.title}>Login</Text>
-
       <TextInput
         style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
+        placeholder="Email or Username"
+        value={emailOrUsername}
+        onChangeText={setEmailOrUsername}
         autoCapitalize="none"
+        keyboardType="email-address"
       />
       <TextInput
         style={styles.input}
@@ -36,25 +86,15 @@ export default function LoginScreen({ navigation }) {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        autoCapitalize="none"
       />
-
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
+      <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
+        {loading ? <Text style={styles.buttonText}>Loading...</Text> : <Text style={styles.buttonText}>Login</Text>}
       </TouchableOpacity>
-      <TouchableOpacity style={styles.button} onPress={() => navigation.replace('Home')}>
-         <Text style={styles.buttonText}>Skip Login</Text>
+      <TouchableOpacity style={styles.link} onPress={() => navigation.navigate('RegisterScreen')}>
+        <Text style={styles.linkText}>New to TALC? Register here</Text>
       </TouchableOpacity>
-
-
-      {/* Forgot Password & Register Links */}
-      <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')} style={styles.link}>
-        <Text style={styles.linkText}>Forgot Password?</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => navigation.navigate('Register')} style={styles.link}>
-        <Text style={styles.linkText}>Don't have an account? Sign Up</Text>
-      </TouchableOpacity>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
