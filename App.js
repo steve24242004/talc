@@ -5,18 +5,20 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./src/firebaseConfig";
-import { getAuth } from "firebase/auth"; // Import Firebase Auth
 
 // Import Screens
 import HomeScreen from "./src/screens/HomeScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
 import Home from "./src/screens/Home";
+import FindRide from "./src/screens/FindRide"; 
+import OfferRide from "./src/screens/OfferRide";
 
 const Stack = createStackNavigator();
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [rides, setRides] = useState([]); // State to hold rides
   const [loading, setLoading] = useState(true);
 
   // Listen for authentication state changes
@@ -46,6 +48,17 @@ export default function App() {
             <Stack.Screen
               name="Home"
               component={Home}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="FindRide"
+              component={FindRide}
+              options={{ headerShown: false }}
+              initialParams={{ rides }}
+            />
+            <Stack.Screen
+              name="OfferRide"
+              component={OfferRide}
               options={{ headerShown: false }}
             />
           </>
