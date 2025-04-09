@@ -9,11 +9,16 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  TextInput
+  TextInput,
+  Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, query, where, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
+
+const { width, height } = Dimensions.get('window');
 
 export default function FindRide({ navigation }) {
   const [rides, setRides] = useState([]);
@@ -22,6 +27,19 @@ export default function FindRide({ navigation }) {
   const [selectedRide, setSelectedRide] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [message, setMessage] = useState('');
+  const [showMap, setShowMap] = useState(false);
+  const [location, setLocation] = useState(null);
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 37.78825,
+    longitude: -122.4324,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+  });
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [locationPickerVisible, setLocationPickerVisible] = useState(false);
+  const [locationSelectionMode, setLocationSelectionMode] = useState(null); // 'origin' or 'destination'
+  const [origin, setOrigin] = useState('');
+  const [destination, setDestination] = useState('');
 
   useEffect(() => {
     // Start fade-in animation
@@ -30,6 +48,24 @@ export default function FindRide({ navigation }) {
       duration: 500,
       useNativeDriver: true,
     }).start();
+    
+    // Get current location
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission to access location was denied');
+        return;
+      }
+
+      let location = await Location.getCurrentPositionAsync({});
+      setLocation(location);
+      setMapRegion({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.0922,
+        longitudeDelta: 0.0421,
+      });
+    })();
     
     // Fetch rides from Firestore
     fetchRides();
@@ -40,16 +76,23 @@ export default function FindRide({ navigation }) {
       setLoading(true);
       const currentUser = auth.currentUser;
       
-      // Create query to get active rides sorted by departure date
-      // Exclude rides published by the current user
-      const ridesRef = collection(db, "rides");
-      const q = query(
+      let ridesRef = collection(db, "rides");
+      let q = query(
         ridesRef, 
         where("status", "==", "active"),
         where("userId", "!=", currentUser.uid),
         orderBy("userId"), // Required for the inequality filter above
         orderBy("departureDateTime")
       );
+      
+      // Add filters for origin/destination if they exist
+      if (origin) {
+        q = query(q, where("origin", "==", origin));
+      }
+      
+      if (destination) {
+        q = query(q, where("destination", "==", destination));
+      }
       
       const querySnapshot = await getDocs(q);
       const ridesList = [];
@@ -59,7 +102,6 @@ export default function FindRide({ navigation }) {
         ridesList.push({
           id: doc.id,
           ...rideData,
-          // Convert Firestore timestamp to JS Date for display
           departureDateTime: rideData.departureDateTime.toDate()
         });
       });
@@ -124,6 +166,66 @@ export default function FindRide({ navigation }) {
     }
   };
 
+  const toggleMap = () => {
+    setShowMap(!showMap);
+  };
+
+  const openLocationPicker = (mode) => {
+    setLocationSelectionMode(mode);
+    setLocationPickerVisible(true);
+  };
+
+  const handleMapPress = (e) => {
+    const coords = e.nativeEvent.coordinate;
+    setSelectedLocation(coords);
+  };
+
+  const confirmLocationSelection = async () => {
+    if (!selectedLocation) {
+      Alert.alert("Error", "Please select a location on the map");
+      return;
+    }
+
+    try {
+      // Reverse geocode to get address
+      const address = await reverseGeocode(selectedLocation);
+      
+      if (locationSelectionMode === 'origin') {
+        setOrigin(address);
+      } else {
+        setDestination(address);
+      }
+      
+      setLocationPickerVisible(false);
+      setSelectedLocation(null);
+      
+      // Fetch rides with new filters
+      fetchRides();
+    } catch (error) {
+      console.error("Error with geocoding:", error);
+      Alert.alert("Error", "Could not get address from location");
+    }
+  };
+
+  const reverseGeocode = async (coords) => {
+    try {
+      const result = await Location.reverseGeocodeAsync({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      });
+      
+      if (result && result.length > 0) {
+        const { city, region, country } = result[0];
+        return `${city || ""}, ${region || ""}, ${country || ""}`.replace(/^, /, '').replace(/, $/, '');
+      }
+      
+      return `(${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})`;
+    } catch (error) {
+      console.error("Reverse geocoding error:", error);
+      return `(${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})`;
+    }
+  };
+
   const renderRide = ({ item }) => (
     <Animated.View style={[styles.rideItem, { opacity: fadeAnim }]}>
       <View style={styles.rideHeader}>
@@ -170,24 +272,127 @@ export default function FindRide({ navigation }) {
           <Ionicons name="arrow-back" size={24} color="#007bff" />
         </TouchableOpacity>
         <Text style={styles.title}>Available Rides</Text>
+        <TouchableOpacity onPress={toggleMap} style={styles.mapButton}>
+          <Ionicons name={showMap ? "list" : "map"} size={24} color="#007bff" />
+        </TouchableOpacity>
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#007bff" style={styles.loader} />
-      ) : rides.length > 0 ? (
-        <FlatList
-          data={rides}
-          renderItem={renderRide}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.ridesList}
-        />
-      ) : (
-        <View style={styles.emptyState}>
-          <Ionicons name="car-outline" size={60} color="#ccc" />
-          <Text style={styles.emptyText}>No rides available</Text>
-          <Text style={styles.emptySubtext}>Check back later for new rides!</Text>
+      {/* Filter Section */}
+      <View style={styles.filterContainer}>
+        <View style={styles.filterRow}>
+          <TouchableOpacity 
+            style={styles.filterButton}
+            onPress={() => openLocationPicker('origin')}
+          >
+            <Ionicons name="location" size={18} color="#007bff" />
+            <Text style={styles.filterButtonText}>
+              {origin || "From Where?"}
+            </Text>
+          </TouchableOpacity>
+          
+          <View style={styles.arrowContainer}>
+            <Ionicons name="arrow-forward" size={18} color="#666" />
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.filterButton}
+            onPress={() => openLocationPicker('destination')}
+          >
+            <Ionicons name="location" size={18} color="#007bff" />
+            <Text style={styles.filterButtonText}>
+              {destination || "To Where?"}
+            </Text>
+          </TouchableOpacity>
         </View>
+      </View>
+
+      {showMap ? (
+        <View style={styles.mapContainer}>
+          <MapView
+            style={styles.map}
+            provider={PROVIDER_GOOGLE}
+            region={mapRegion}
+            showsUserLocation={true}
+          >
+            {rides.map((ride) => (
+              <Marker
+                key={ride.id}
+                coordinate={{
+                  latitude: ride.originCoords?.latitude || mapRegion.latitude,
+                  longitude: ride.originCoords?.longitude || mapRegion.longitude
+                }}
+                title={ride.origin}
+                description={`To: ${ride.destination} | $${ride.price}`}
+                pinColor="#007bff"
+              />
+            ))}
+          </MapView>
+        </View>
+      ) : (
+        loading ? (
+          <ActivityIndicator size="large" color="#007bff" style={styles.loader} />
+        ) : rides.length > 0 ? (
+          <FlatList
+            data={rides}
+            renderItem={renderRide}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.ridesList}
+          />
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons name="car-outline" size={60} color="#ccc" />
+            <Text style={styles.emptyText}>No rides available</Text>
+            <Text style={styles.emptySubtext}>Check back later for new rides!</Text>
+          </View>
+        )
       )}
+
+      {/* Location Picker Modal */}
+      <Modal
+        visible={locationPickerVisible}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setLocationPickerVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.modalBackButton}
+              onPress={() => setLocationPickerVisible(false)}
+            >
+              <Ionicons name="close" size={24} color="#007bff" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>
+              Select {locationSelectionMode === 'origin' ? 'Origin' : 'Destination'}
+            </Text>
+            <TouchableOpacity 
+              style={styles.modalConfirmButton}
+              onPress={confirmLocationSelection}
+            >
+              <Text style={styles.modalConfirmText}>Confirm</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <MapView
+            style={styles.locationPickerMap}
+            provider={PROVIDER_GOOGLE}
+            region={mapRegion}
+            showsUserLocation={true}
+            onPress={handleMapPress}
+          >
+            {selectedLocation && (
+              <Marker
+                coordinate={selectedLocation}
+                pinColor="#007bff"
+              />
+            )}
+          </MapView>
+          
+          <Text style={styles.mapInstructions}>
+            Tap on the map to select your {locationSelectionMode === 'origin' ? 'starting point' : 'destination'}
+          </Text>
+        </View>
+      </Modal>
 
       {/* Request Modal */}
       <Modal
@@ -251,6 +456,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingTop: 50,
     paddingHorizontal: 20,
     marginBottom: 10
@@ -262,7 +468,41 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
-    marginLeft: 15
+    flex: 1,
+    textAlign: 'center'
+  },
+  mapButton: {
+    padding: 5
+  },
+  filterContainer: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee'
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    flex: 0.45
+  },
+  filterButtonText: {
+    fontSize: 14,
+    color: '#333',
+    marginLeft: 5
+  },
+  arrowContainer: {
+    flex: 0.1,
+    alignItems: 'center'
   },
   loader: {
     flex: 1,
@@ -421,5 +661,48 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '500'
+  },
+  mapContainer: {
+    flex: 1,
+    overflow: 'hidden'
+  },
+  map: {
+    width: '100%',
+    height: '100%'
+  },
+  locationPickerMap: {
+    width: '100%',
+    height: '80%'
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff'
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    marginBottom: 10
+  },
+  modalBackButton: {
+    padding: 5
+  },
+  modalConfirmButton: {
+    backgroundColor: '#007bff',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 8
+  },
+  modalConfirmText: {
+    color: '#fff',
+    fontWeight: '500'
+  },
+  mapInstructions: {
+    textAlign: 'center',
+    padding: 15,
+    color: '#666',
+    fontSize: 16
   }
 });
