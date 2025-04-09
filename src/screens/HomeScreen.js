@@ -13,7 +13,7 @@ export default function HomeScreen({ navigation }) {
   return (
     <View style={styles.container}>
       {/* App Logo */}
-      <Image source={require('../../assets/images/Logo.png')} style={styles.logo} />
+      <Image source={require('../../assets/images/Logo.jpg')} style={styles.logo} />
       
       <Text style={styles.text}>Welcome to TALC!</Text>
       <Text style={styles.subText}>Redirecting to Login...</Text>

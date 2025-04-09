@@ -21,7 +21,7 @@ export default function Home({ navigation }) {
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
 
-      <Image source={require('../../assets/images/Logo.png')} style={styles.logo} />
+      <Image source={require('../../assets/images/Logo.jpg')} style={styles.logo} />
       <Text style={styles.title}>Where do you want to go?</Text>
 
       <TouchableOpacity style={styles.findRideButton} onPress={() => navigation.navigate('FindRide')}>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native';
 import { auth, db } from '../firebaseConfig'; // Import Firebase config
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
@@ -48,6 +48,7 @@ export default function RegisterScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <Image source={require('../../assets/images/Logo.jpg')} style={styles.logo} />
       <Text style={styles.title}>Register</Text>
       <TextInput style={styles.input} placeholder="First Name" value={firstName} onChangeText={setFirstName} />
       <TextInput style={styles.input} placeholder="Last Name" value={lastName} onChangeText={setLastName} />
@@ -68,6 +69,7 @@ export default function RegisterScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9f9f9' },
+  logo: { width: 150, height: 150, marginBottom: 20 },
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, color: '#333' },
   input: { width: '80%', height: 50, borderWidth: 1, borderColor: '#ccc', borderRadius: 10, paddingHorizontal: 15, marginBottom: 15 },
   button: { backgroundColor: '#007bff', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 10 },

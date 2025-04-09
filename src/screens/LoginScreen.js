@@ -70,7 +70,7 @@ export default function LoginScreen({ navigation }) {
       behavior={Platform.OS === "ios" ? "padding" : "height"} 
       style={styles.container}
     >
-      <Image source={require('../../assets/images/Logo.png')} style={styles.logo} />
+      <Image source={require('../../assets/images/Logo.jpg')} style={styles.logo} />
       <Text style={styles.title}>Login</Text>
       <TextInput
         style={styles.input}
